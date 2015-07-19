@@ -83,8 +83,8 @@ enum error { ERROR_ENTRIES };
 #define M(m)    "ERROR " m CRLF
 #define X(a, b) { M(b), sizeof(M(b))-1 },
 struct {
-        const char *str;
-        const size_t len;
+        const char      *str;
+        const size_t    len;
 } error_msg[] = { ERROR_ENTRIES };
 #undef M
 #undef X
@@ -423,8 +423,8 @@ parse_logout(const char *bytes, size_t len, struct user *user, int kq)
 
 #define X(a, b) { a, sizeof(a)-1, b }
 struct {
-        const char *name;
-        const unsigned short namelen;
+        const char              *name;
+        const unsigned short    namelen;
         void (*parse)(const char *, size_t, struct user *, int);
 } chatcmd[] = {
         X("LOGIN", parse_login),
@@ -506,6 +506,7 @@ cleanup_conn(struct user *user)
         SLIST_REMOVE(&users, user, user, next_user);
         SLIST_FOREACH_SAFE(lp, &(user->channels), next, tmp) {
                 rmuser(user, (struct channel *)lp->elt);
+                free_list(lp);
         }
         close(user->connfd);
         bzero(user, sizeof(*user));
