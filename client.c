@@ -12,9 +12,9 @@
 #define MIN(a, b)       ((a) < (b) ? (a) : (b))
 #define MAX(a, b)       ((a) < (b) ? (b) : (a))
 
-static struct cbuf *cmds = NULL;
-static struct cbuf *input = NULL;
-static struct cbuf *output = NULL;
+static struct cbuf *cmds;
+static struct cbuf *input;
+static struct cbuf *output;
 static int sockfd;
 
 static void
@@ -34,8 +34,6 @@ read_cmds(const struct kevent *ke, int kq)
 {
         struct kevent change;
 
-        if (input == NULL)
-                input = cbuf();
         if (ke->data == 0)
                 exit(EXIT_FAILURE);
         cread(STDIN_FILENO, input, ke->data);
@@ -44,8 +42,6 @@ read_cmds(const struct kevent *ke, int kq)
                        (void *)send_cmds);
                 kevent_or_die(kq, &change, 1, NULL, 0, NULL);
         }
-        if (cmds == NULL)
-                cmds = cbuf();
         while (input->len > 0)
                 if (cmovec(input, cmds, '\n', input->len)) {
                         cset('\r', cmds->len, cmds);
@@ -73,8 +69,6 @@ read_msgs(const struct kevent *ke, int kq)
 
         if (ke->data == 0)
                 err_quit("server terminated the connection");
-        if (output == NULL)
-                output = cbuf();
         cread(sockfd, output, ke->data);
         if (output->len == ke->data) {
                 EV_SET(&change, STDOUT_FILENO, EVFILT_WRITE, EV_ENABLE, 0, 0,
@@ -111,6 +105,9 @@ main(void)
         kq = kqueue_or_die();
         kevent_or_die(kq, event, 4, NULL, 0, NULL);
 
+        cmds = cbuf();
+        input = cbuf();
+        output = cbuf();
         for (;;) {
                 int n;
 
