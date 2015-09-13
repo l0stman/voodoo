@@ -37,4 +37,11 @@ cset(char c, size_t pos, struct cbuf *cbp)
                 cbp->len = pos;
 }
 
+static inline void
+cappend(char c, struct cbuf *cbp)
+{
+        assert(cbp->len < cbp->size);
+        cbp->buf[(cbp->offset + cbp->len++) % cbp->size] = c;
+}
+
 #endif  /* !VOODOO_CBUF_H_ */
