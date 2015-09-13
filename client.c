@@ -15,6 +15,34 @@ static struct cbuf *cmds;
 static struct cbuf *input;
 static struct cbuf *output;
 static int sockfd;
+static int read_enabled;
+
+static size_t
+input_to_cmds(void)
+{
+        size_t nbytes, rem, i;
+        char c;
+
+        rem = cmds->size - cmds->len;
+        nbytes = 0;
+        for (i = 0; nbytes < rem && i < input->len; i++) {
+                if ((c = cref(input, i)) == '\n') {
+                        if (cmds->len == cmds->size-1)
+                                break; /* not enough space for CRLF */
+                        cappend('\r', cmds);
+                        cappend('\n', cmds);
+                        nbytes += 2;
+                } else {
+                        cappend(c, cmds);
+                        ++nbytes;
+                }
+        }
+        input->offset = (input->offset + i) % input->size;
+        input->len -= i;
+        return (nbytes);
+}
+
+static void read_cmds(const struct kevent *, int);
 
 static void
 send_cmds(const struct kevent *ke, int kq)
@@ -22,6 +50,12 @@ send_cmds(const struct kevent *ke, int kq)
         struct kevent change;
 
         cwrite(sockfd, cmds, MIN(ke->data, cmds->len));
+        if (input_to_cmds() && !read_enabled) {
+                EV_SET(&change, STDIN_FILENO, EVFILT_READ, EV_ENABLE, 0, 0,
+                       (void *)read_cmds);
+                kevent_or_die(kq, &change, 1, NULL, 0, NULL);
+                read_enabled = 1;
+        }
         if (cmds->len == 0) {
                 EV_SET(&change, sockfd, EVFILT_WRITE, EV_DISABLE, 0, 0, NULL);
                 kevent_or_die(kq, &change, 1, NULL, 0, NULL);
@@ -35,17 +69,20 @@ read_cmds(const struct kevent *ke, int kq)
 
         if (ke->data == 0)
                 exit(EXIT_FAILURE);
-        cread(STDIN_FILENO, input, ke->data);
-        if (input->len == ke->data) {
+        cread(STDIN_FILENO, input, MIN(ke->data, input->size-input->len));
+        if (cmds->len == 0) {
                 EV_SET(&change, sockfd, EVFILT_WRITE, EV_ENABLE, 0, 0,
                        (void *)send_cmds);
                 kevent_or_die(kq, &change, 1, NULL, 0, NULL);
         }
-        while (input->len > 0)
-                if (cmovec(input, cmds, '\n', input->len)) {
-                        cset('\r', cmds->len, cmds);
-                        cset('\n', cmds->len, cmds);
-                }
+        if (input->len == input->size &&
+            (cmds->len == cmds->size ||
+             (cmds->len == cmds->size-1 && cref(input, 0) == '\n'))) {
+                EV_SET(&change, STDIN_FILENO, EVFILT_READ, EV_DISABLE, 0, 0,NULL);
+                kevent_or_die(kq, &change, 1, NULL, 0, NULL);
+                read_enabled = 0;
+        } else
+                input_to_cmds();
 }
 
 static void
@@ -107,6 +144,7 @@ main(void)
         cmds = cbuf();
         input = cbuf();
         output = cbuf();
+        read_enabled = 1;
         for (;;) {
                 int n;
 
