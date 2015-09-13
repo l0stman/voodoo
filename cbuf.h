@@ -29,12 +29,8 @@ cref(const struct cbuf *cbp, size_t pos)
 static inline void
 cset(char c, size_t pos, struct cbuf *cbp)
 {
-        assert(pos <= cbp->len);
-        if (pos == cbp->len && cbp->len == cbp->size)
-                cresize(1, cbp);
+        assert(pos < cbp->len);
         cbp->buf[(cbp->offset + pos) % cbp->size] = c;
-        if (++pos > cbp->len)
-                cbp->len = pos;
 }
 
 static inline void
