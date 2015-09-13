@@ -16,8 +16,6 @@ extern struct cbuf *cbuf(void);
 extern void     cfree(struct cbuf *);
 extern ssize_t  cread(int, struct cbuf *, size_t);
 extern ssize_t  cwrite(int , struct cbuf *, size_t);
-extern size_t   cresize(size_t, struct cbuf *);
-extern int      cmovec(struct cbuf *, struct cbuf *, char, size_t);
 
 static inline char
 cref(const struct cbuf *cbp, size_t pos)
