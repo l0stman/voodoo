@@ -17,7 +17,6 @@ cbuf(void)
         cbp = malloc_or_die(sizeof(*cbp) + CBUFSIZ);
         cbp->buf = (char *)(cbp+1);
         cbp->offset = 0;
-        cbp->size = CBUFSIZ;
         cbp->len = 0;
         return (cbp);
 }
@@ -36,11 +35,11 @@ cread(int fd, struct cbuf *cbp, size_t nbytes)
 
         if (nbytes == 0)
                 return (nbytes);
-        assert(nbytes <= cbp->size - cbp->len);
-        offset = (cbp->offset + cbp->len) % cbp->size;
-        if (offset + nbytes > cbp->size) {
-                nread = read_or_die(fd, cbp->buf + offset, cbp->size - offset);
-                nread += read_or_die(fd, cbp->buf, offset + nbytes - cbp->size);
+        assert(nbytes <= CBUFSIZ - cbp->len);
+        offset = (cbp->offset + cbp->len) & CBUFMASK;
+        if (offset + nbytes > CBUFSIZ) {
+                nread = read_or_die(fd, cbp->buf + offset, CBUFSIZ - offset);
+                nread += read_or_die(fd, cbp->buf, offset + nbytes - CBUFSIZ);
         } else
                 nread = read_or_die(fd, cbp->buf + offset, nbytes);
         cbp->len += nread;
@@ -52,12 +51,12 @@ cwrite(int fd, struct cbuf *cbp, size_t nbytes)
 {
         if (cbp->len < nbytes)
                 err_quit("cwrite: not enough bytes in the buffer");
-        if (cbp->offset + nbytes > cbp->size) {
-                write_or_die(fd, cbp->buf + cbp->offset, cbp->size - cbp->offset);
-                write_or_die(fd, cbp->buf, cbp->offset + nbytes - cbp->size);
+        if (cbp->offset + nbytes > CBUFSIZ) {
+                write_or_die(fd, cbp->buf + cbp->offset, CBUFSIZ - cbp->offset);
+                write_or_die(fd, cbp->buf, cbp->offset + nbytes - CBUFSIZ);
         } else
                 write_or_die(fd, cbp->buf + cbp->offset, nbytes);
         cbp->len -= nbytes;
-        cbp->offset = (cbp->offset + nbytes) % cbp->size;
+        cbp->offset = (cbp->offset + nbytes) & CBUFMASK;
         return (nbytes);
 }

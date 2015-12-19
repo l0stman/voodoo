@@ -3,12 +3,12 @@
 
 #include <assert.h>
 
-#define CBUFSIZ 1024
+#define CBUFSIZ         1024            /* should be a power of 2 */
+#define CBUFMASK        (CBUFSIZ-1)
 
 struct cbuf {
         char    *buf;
         size_t  offset;
-        size_t  size;
         size_t  len;
 };
 
@@ -21,21 +21,21 @@ static inline char
 cref(const struct cbuf *cbp, size_t pos)
 {
         assert(pos < cbp->len);
-        return (cbp->buf[(cbp->offset + pos) % cbp->size]);
+        return (cbp->buf[(cbp->offset + pos) & CBUFMASK]);
 }
 
 static inline void
 cset(char c, size_t pos, struct cbuf *cbp)
 {
         assert(pos < cbp->len);
-        cbp->buf[(cbp->offset + pos) % cbp->size] = c;
+        cbp->buf[(cbp->offset + pos) & CBUFMASK] = c;
 }
 
 static inline void
 cappend(char c, struct cbuf *cbp)
 {
-        assert(cbp->len < cbp->size);
-        cbp->buf[(cbp->offset + cbp->len++) % cbp->size] = c;
+        assert(cbp->len < CBUFSIZ);
+        cbp->buf[(cbp->offset + cbp->len++) & CBUFMASK] = c;
 }
 
 #endif  /* !VOODOO_CBUF_H_ */

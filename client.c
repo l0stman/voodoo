@@ -23,11 +23,11 @@ input_to_cmds(void)
         size_t nbytes, rem, i;
         char c;
 
-        rem = cmds->size - cmds->len;
+        rem = CBUFSIZ - cmds->len;
         nbytes = 0;
         for (i = 0; nbytes < rem && i < input->len; i++) {
                 if ((c = cref(input, i)) == '\n') {
-                        if (cmds->len == cmds->size-1)
+                        if (cmds->len == CBUFSIZ-1)
                                 break; /* not enough space for CRLF */
                         cappend('\r', cmds);
                         cappend('\n', cmds);
@@ -37,7 +37,7 @@ input_to_cmds(void)
                         ++nbytes;
                 }
         }
-        input->offset = (input->offset + i) % input->size;
+        input->offset = (input->offset + i) & CBUFMASK;
         input->len -= i;
         return (nbytes);
 }
@@ -69,15 +69,15 @@ read_cmds(const struct kevent *ke, int kq)
 
         if (ke->data == 0)
                 exit(EXIT_FAILURE);
-        cread(STDIN_FILENO, input, MIN(ke->data, input->size-input->len));
+        cread(STDIN_FILENO, input, MIN(ke->data, CBUFSIZ-input->len));
         if (cmds->len == 0) {
                 EV_SET(&change, sockfd, EVFILT_WRITE, EV_ENABLE, 0, 0,
                        (void *)send_cmds);
                 kevent_or_die(kq, &change, 1, NULL, 0, NULL);
         }
-        if (input->len == input->size &&
-            (cmds->len == cmds->size ||
-             (cmds->len == cmds->size-1 && cref(input, 0) == '\n'))) {
+        if (input->len == CBUFSIZ &&
+            (cmds->len == CBUFSIZ ||
+             (cmds->len == CBUFSIZ-1 && cref(input, 0) == '\n'))) {
                 EV_SET(&change, STDIN_FILENO, EVFILT_READ, EV_DISABLE, 0, 0,NULL);
                 kevent_or_die(kq, &change, 1, NULL, 0, NULL);
                 read_enabled = 0;
