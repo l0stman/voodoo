@@ -73,6 +73,7 @@ free_msg(struct msg *m)
         X(CHSHARP, "channel name should start with #")                  \
         X(CHJOINED, "already joined the channel")                       \
         X(CHNJOINED, "haven't joined the channel")                      \
+        X(CHTOOMANY, "joined the allowed maximum number of channels")   \
         X(MNORECIP, "message recipient is empty")                       \
         X(MNOSPACE, "absence of space after recipient's name")
 
@@ -134,6 +135,8 @@ list_remove(void *elt, struct list_head *head)
         free_list(cont);
 }
 
+struct channel;
+
 struct user {
         char            *name;
         size_t          namelen;
@@ -145,7 +148,8 @@ struct user {
         unsigned        write_enabled:1;
         unsigned        connected:1;
         unsigned        skip_curr_cmd:1;
-        struct list_head channels;
+        struct channel  *joined_chans[8];
+        unsigned short  nchans;
 };
 
 static struct table *users;
@@ -261,7 +265,6 @@ parse_join(const char *bytes, size_t len, struct user *user, int kq)
 {
         struct channel *c;
         struct list *lp;
-        struct user *u;
 
         if (verify_name(bytes, len, user, kq, CHEMTPY, CHILLEGAL))
                 return;
@@ -272,15 +275,17 @@ parse_join(const char *bytes, size_t len, struct user *user, int kq)
         if ((c = table_get(channels, bytes, len)) == NULL) {
                 c = chancpy(bytes, len);
                 table_put(channels, c->name, c->len, c);
+        } else
+                for (short i = 0; i < user->nchans; i++)
+                        if (user->joined_chans[i] == c) {
+                                perror_to(user, CHJOINED, kq);
+                                return;
+                        }
+        if (user->nchans == NELEMS(user->joined_chans)) {
+                perror_to(user, CHTOOMANY, kq);
+                return;
         }
-        LIST_FOREACH_ELT(lp, &(c->users), struct user, u)
-                if (bequal(user->name, user->namelen, u->name, u->namelen)) {
-                        perror_to(user, CHJOINED, kq);
-                        return;
-                }
-
-        lp = list(c);
-        SLIST_INSERT_HEAD(&(user->channels), lp, next);
+        user->joined_chans[user->nchans++] = c;
         lp = list(user);
         SLIST_INSERT_HEAD(&(c->users), lp, next);
         ok(user, kq);
@@ -298,28 +303,25 @@ rmuser(struct user *usr, struct channel *chan)
 }
 
 static void
-parse_part(const char *bytes, size_t len, struct user *user, int kq)
+parse_part(const char *bytes, size_t len, struct user *u, int kq)
 {
-        struct channel *c;
-        struct list *lp;
 
-        if (verify_name(bytes, len, user, kq, CHEMTPY, CHILLEGAL))
+        if (verify_name(bytes, len, u, kq, CHEMTPY, CHILLEGAL))
                 return;
         if (*bytes != '#') {
-                perror_to(user, CHSHARP, kq);
+                perror_to(u, CHSHARP, kq);
                 return;
         }
-        LIST_FOREACH_ELT(lp, &(user->channels), struct channel, c)
-                if (bequal(c->name, c->len, bytes, len))
-                        break;
-
-        if (lp == NULL) {
-                perror_to(user, CHNJOINED, kq);
-                return;
+        for (short i = 0; i < u->nchans; i++) {
+                struct channel *c = u->joined_chans[i];
+                if (bequal(c->name, c->len, bytes, len)) {
+                        rmuser(u, c);
+                        u->joined_chans[i] = u->joined_chans[--u->nchans];
+                        ok(u, kq);
+                        return;
+                }
         }
-        rmuser(user, c);
-        list_remove(c, &user->channels);
-        ok(user, kq);
+        perror_to(u, CHNJOINED, kq);
 }
 
 static void
@@ -368,28 +370,27 @@ parse_msg(const char *bytes, size_t len, struct user *user, int kq)
         m->refcnt = 0;
         if (bytes[0] == '#') {
                 struct channel *c;
-                struct list *cp, *up;
+                struct list *up;
 
-                LIST_FOREACH_ELT(cp, &(user->channels), struct channel, c) {
+                for (short i = 0; i < user->nchans; i++) {
+                        c = user->joined_chans[i];
                         if (bequal(c->name, c->len, bytes, rlen)) {
-                                LIST_FOREACH_ELT(up, &(c->users), struct user, u)
+                                LIST_FOREACH_ELT(up, &c->users, struct user, u)
                                         writeto(u, m, kq);
-                                break;
+                                ok(user, kq);
+                                return;
                         }
                 }
-                if (cp == NULL) {
-                        perror_to(user, CHNJOINED, kq);
-                        free_msg(m);
-                        return;
-                }
+                perror_to(user, CHNJOINED, kq);
+                free_msg(m);
         } else if ((u = table_get(users, bytes, rlen)) == NULL) {
                         perror_to(user, UNEXIST, kq);
                         free_msg(m);
                         return;
-                }
-        else
+        } else {
                 writeto(u, m, kq);
-        ok(user, kq);
+                ok(user, kq);
+        }
 }
 
 static void cleanup_conn(struct user *);
@@ -464,13 +465,12 @@ accept_conn(int listenfd, int kq, struct user *client)
         client[connfd].connfd = connfd;
         client[connfd].msg_queue = queue();
         client[connfd].connected = 1;
-        SLIST_INIT(&(client[connfd].channels));
+        client[connfd].nchans = 0;
 }
 
 static void
 cleanup_conn(struct user *user)
 {
-        struct list *tmp, *lp;
         struct msg *m;
 
         while (!STAILQ_EMPTY(user->msg_queue)) {
@@ -487,10 +487,8 @@ cleanup_conn(struct user *user)
         }
         if (user->cmdbuf)
                 free(user->cmdbuf);
-        SLIST_FOREACH_SAFE(lp, &(user->channels), next, tmp) {
-                rmuser(user, (struct channel *)lp->elt);
-                free_list(lp);
-        }
+        for (short i = 0; i < user->nchans; i++)
+                rmuser(user, user->joined_chans[i]);
         close(user->connfd);
         bzero(user, sizeof(*user));
 }
