@@ -113,7 +113,7 @@ table_get(const struct table *t, const char *key, uint8_t len)
         struct bucket *bp;
 
         bp = table_find(t, key, len, NULL);
-        return (void *)(bp && bp->val);
+        return (bp ? bp->val : NULL);
 }
 
 void
