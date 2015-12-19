@@ -152,14 +152,13 @@ struct user {
 static struct table *users;
 static struct user *client;
 
-SLIST_HEAD(, channel) channels;
-
 struct channel {
         const char              *name;
         size_t                  len;
         struct list_head        users;
-        SLIST_ENTRY(channel)    next_channel;
 };
+
+static struct table *channels;
 
 struct channel *
 channel(const char *name, size_t len)
@@ -271,12 +270,9 @@ parse_join(const char *bytes, size_t len, struct user *user, int kq)
                 perror_to(user, CHSHARP, kq);
                 return;
         }
-        SLIST_FOREACH(c, &channels, next_channel)
-                if (bequal(c->name, c->len, bytes, len))
-                        break;
-        if (c == NULL) {
+        if ((c = table_get(channels, bytes, len)) == NULL) {
                 c = chancpy(bytes, len);
-                SLIST_INSERT_HEAD(&channels, c, next_channel);
+                table_put(channels, c->name, c->len, c);
         }
         LIST_FOREACH_ELT(lp, &(c->users), struct user, u)
                 if (bequal(user->name, user->namelen, u->name, u->namelen)) {
@@ -297,7 +293,7 @@ rmuser(struct user *usr, struct channel *chan)
 
         list_remove(usr, &chan->users);
         if (SLIST_EMPTY(&(chan->users))) {
-                SLIST_REMOVE(&channels, chan, channel, next_channel);
+                table_del(channels, chan->name, chan->len);
                 free_channel(chan);
         }
 }
@@ -652,7 +648,7 @@ main(int argc, char **argv)
         kevent_or_die(kq, eventlist, 1, NULL, 0, NULL);
 
         users = default_table();
-        SLIST_INIT(&channels);
+        channels = default_table();
 
         for (;;) {
                 int n;
