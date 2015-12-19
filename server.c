@@ -236,12 +236,6 @@ verify_name(const char *bytes, size_t len, struct user *user, int kq,
         return (0);
 }
 
-static inline int
-bequal(const void *b1, size_t len1, const void *b2, size_t len2)
-{
-        return (len1 == len2 && bcmp(b1, b2, len1) == 0);
-}
-
 static void
 parse_login(const char *bytes, size_t len, struct user *user, int kq)
 {
