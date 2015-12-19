@@ -10,6 +10,7 @@
 
 #include "err.h"
 #include "kqueue.h"
+#include "table.h"
 #include "utils.h"
 
 #define CMDMAXSIZE      1024 /* Maximum size (with CRLF) of a single command */
@@ -134,8 +135,6 @@ list_remove(void *elt, struct list_head *head)
         free_list(cont);
 }
 
-SLIST_HEAD(, user) users;
-
 struct user {
         char            *name;
         size_t          namelen;
@@ -148,8 +147,10 @@ struct user {
         unsigned        connected:1;
         unsigned        skip_curr_cmd:1;
         struct list_head channels;
-        SLIST_ENTRY(user) next_user;
 };
+
+static struct table *users;
+static struct user *client;
 
 SLIST_HEAD(, channel) channels;
 
@@ -239,7 +240,6 @@ verify_name(const char *bytes, size_t len, struct user *user, int kq,
 static void
 parse_login(const char *bytes, size_t len, struct user *user, int kq)
 {
-        struct user *u;
 
         if (verify_name(bytes, len, user, kq, UEMPTY, UILLEGAL))
                 return;
@@ -247,14 +247,14 @@ parse_login(const char *bytes, size_t len, struct user *user, int kq)
                 perror_to(user, ULOGGED, kq);
                 return;
         }
-        SLIST_FOREACH(u, &users, next_user)
-                if (bequal(u->name, u->namelen, bytes, len)) {
-                        perror_to(user, UUSED, kq);
-                        return;
-                }
+        if (table_get(users, bytes, len)) {
+                perror_to(user, UUSED, kq);
+                return;
+        }
         user->name = malloc_or_die(len);
         bcopy(bytes, user->name, len);
         user->namelen = len;
+        table_put(users, user->name, user->namelen, user);
         ok(user, kq);
 }
 
@@ -387,19 +387,13 @@ parse_msg(const char *bytes, size_t len, struct user *user, int kq)
                         free_msg(m);
                         return;
                 }
-        } else {
-                SLIST_FOREACH(u, &users, next_user) {
-                        if (bequal(u->name, u->namelen, bytes, rlen)) {
-                                writeto(u, m, kq);
-                                break;
-                        }
-                }
-                if (u == NULL) {
+        } else if ((u = table_get(users, bytes, rlen)) == NULL) {
                         perror_to(user, UNEXIST, kq);
                         free_msg(m);
                         return;
                 }
-        }
+        else
+                writeto(u, m, kq);
         ok(user, kq);
 }
 
@@ -475,7 +469,6 @@ accept_conn(int listenfd, int kq, struct user *client)
         client[connfd].connfd = connfd;
         client[connfd].msg_queue = queue();
         client[connfd].connected = 1;
-        SLIST_INSERT_HEAD(&users, client+connfd, next_user);
         SLIST_INIT(&(client[connfd].channels));
 }
 
@@ -493,11 +486,12 @@ cleanup_conn(struct user *user)
 
         }
         free_queue(user->msg_queue);
-        if (user->name)
+        if (user->name) {
+                table_del(users, user->name, user->namelen);
                 free(user->name);
+        }
         if (user->cmdbuf)
                 free(user->cmdbuf);
-        SLIST_REMOVE(&users, user, user, next_user);
         SLIST_FOREACH_SAFE(lp, &(user->channels), next, tmp) {
                 rmuser(user, (struct channel *)lp->elt);
                 free_list(lp);
@@ -629,7 +623,6 @@ main(int argc, char **argv)
 {
         struct sockaddr_in servaddr;
         struct kevent *eventlist;
-        struct user *client;
         long nevents;
         int listenfd, optval, kq;
 
@@ -658,7 +651,7 @@ main(int argc, char **argv)
         EV_SET(eventlist, listenfd, EVFILT_READ, EV_ADD, 0, 0, NULL);
         kevent_or_die(kq, eventlist, 1, NULL, 0, NULL);
 
-        SLIST_INIT(&users);
+        users = default_table();
         SLIST_INIT(&channels);
 
         for (;;) {
