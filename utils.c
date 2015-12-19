@@ -48,6 +48,16 @@ malloc_or_die(size_t size)
 }
 
 void *
+calloc_or_die(size_t number, size_t size)
+{
+        void *ptr;
+
+        if ((ptr = calloc(number, size)) == NULL)
+                err_sys("calloc");
+        return (ptr);
+}
+
+void *
 realloc_or_die(void *ptr, size_t size)
 {
         if ((ptr = realloc(ptr, size)) == NULL)
