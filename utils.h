@@ -6,6 +6,8 @@
 
 #include <strings.h>
 
+#define NELEMS(x)       (sizeof(x)/sizeof((x)[0]))
+
 static inline int
 bequal(const void *b1, size_t len1, const void *b2, size_t len2)
 {

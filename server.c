@@ -14,7 +14,6 @@
 #include "utils.h"
 
 #define CMDMAXSIZE      1024 /* Maximum size (with CRLF) of a single command */
-#define NELEMS(x)	((sizeof(x))/(sizeof((x)[0])))
 #define CRLF            "\x0d\x0a"
 
 STAILQ_HEAD(queue, msg);
