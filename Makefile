@@ -7,9 +7,9 @@ SERVER_OBJS	= server.o err.o utils.o kqueue.o table.o siphash/siphash.o
 CLIENT_OBJS	= client.o err.o utils.o kqueue.o cbuf.o
 PROGNAMES	= server client table_test
 
-all: siphash.o $(PROGNAMES)
+all: $(PROGNAMES)
 
-table_test: siphash.o $(TABLE_OBJS)
+table_test: $(TABLE_OBJS)
 	$(CC) -o $@ $(TABLE_OBJS)
 
 server: $(SERVER_OBJS)
@@ -18,7 +18,7 @@ server: $(SERVER_OBJS)
 client: $(CLIENT_OBJS)
 	$(CC) -o $@ $(CLIENT_OBJS)
 
-siphash.o:
+siphash/siphash.o:
 	cd siphash && make
 
 .SUFFIXES: .o .c
