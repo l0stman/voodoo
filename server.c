@@ -82,11 +82,8 @@ enum error { ERROR_ENTRIES };
 #undef X
 
 #define M(m)    "ERROR " m CRLF
-#define X(a, b) { M(b), sizeof(M(b))-1 },
-struct {
-        const char      *str;
-        const size_t    len;
-} error_msg[] = { ERROR_ENTRIES };
+#define X(a, b) { M(b), sizeof(M(b))-1, 1 },
+static struct msg error_msg[] = { ERROR_ENTRIES };
 #undef M
 #undef X
 
@@ -212,7 +209,7 @@ static inline void
 perror_to(struct user *u, enum error err, int kq)
 {
 
-        writeto(u, msg(error_msg[err].str, error_msg[err].len), kq);
+        writeto(u, &error_msg[err], kq);
 }
 
 static inline void
