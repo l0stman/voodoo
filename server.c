@@ -221,7 +221,7 @@ ok(struct user *u, int kq)
 }
 
 static int
-verify_name(const char *bytes, size_t len, struct user *user, int kq,
+illegal_name(const char *bytes, size_t len, struct user *user, int kq,
             enum error empty, enum error illegal)
 {
 
@@ -229,11 +229,10 @@ verify_name(const char *bytes, size_t len, struct user *user, int kq,
                 cmderr(user, empty, kq);
                 return (1);
         }
-        for (int i = 0; i < len; i++)
-                if (bytes[i] == ' ') {
-                        cmderr(user, illegal, kq);
-                        return (1);
-                }
+        if (memchr(bytes, ' ', len)) {
+                cmderr(user, illegal, kq);
+                return (1);
+        }
         return (0);
 }
 
@@ -241,7 +240,7 @@ static void
 parse_login(const char *bytes, size_t len, struct user *user, int kq)
 {
 
-        if (verify_name(bytes, len, user, kq, UEMPTY, UILLEGAL))
+        if (illegal_name(bytes, len, user, kq, UEMPTY, UILLEGAL))
                 return;
         if (user->name != NULL) {
                 cmderr(user, ULOGGED, kq);
@@ -264,7 +263,7 @@ parse_join(const char *bytes, size_t len, struct user *user, int kq)
         struct channel *c;
         struct list *lp;
 
-        if (verify_name(bytes, len, user, kq, CHEMTPY, CHILLEGAL))
+        if (illegal_name(bytes, len, user, kq, CHEMTPY, CHILLEGAL))
                 return;
         if (*bytes != '#') {
                 cmderr(user, CHSHARP, kq);
@@ -304,7 +303,7 @@ static void
 parse_part(const char *bytes, size_t len, struct user *u, int kq)
 {
 
-        if (verify_name(bytes, len, u, kq, CHEMTPY, CHILLEGAL))
+        if (illegal_name(bytes, len, u, kq, CHEMTPY, CHILLEGAL))
                 return;
         if (*bytes != '#') {
                 cmderr(u, CHSHARP, kq);
