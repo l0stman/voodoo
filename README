@@ -1,0 +1,36 @@
+This is a proof-of-concept event-driven chat server implemented using
+kqueue under FreeBSD.  In the description of the protocol used, <CRLF>
+represents a carriage return followed by a new line.  And the defined
+commands (the trailing <CRLF> included) are limited to 1024 bytes.
+
+The client should login first upon connecting to the server with the
+following command:
+        LOGIN <username><CRLF>
+
+The other commands at the disposal of the clients are:
+JOIN <#chatroom><CRLF>
+        Create a new chatroom or join an existing one.
+
+PART <#chatroom><CRLF>
+        Leave the chatroom.
+
+MSG <#chatroom><message-text><CRLF>
+        Send a message to a chatroom.  All the users in the chatroom receive
+        the message.
+
+MSG <username><message-text><CRLF>
+        Send a message to the given user.
+
+LOGOUT<CRLF>
+        Logout of the chat server.
+
+The server answers to a client's command with either "OK<CRLF>" if the
+command is successful or "ERROR <reason><CRLF>" otherwise.  When a
+message is sent to a chatroom a client is in, he receives the
+following message from the server:
+        GOTROOMMSG <sender> #<chatroom> <message-text><CRLF>
+
+In the case where another user sent a message directly to the client,
+the server sends:
+        GOTUSERMSG <sender> <message-text><CRLF>
+
