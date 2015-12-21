@@ -402,43 +402,47 @@ parse_logout(const char *bytes, size_t len, struct user *user, int kq)
         cleanup_conn(user);
 }
 
-#define X(a, b) { a, sizeof(a)-1, b }
+#define COMMAND_ENTRIES                         \
+        X(MSG, parse_msg)                       \
+        X(LOGIN, parse_login)                   \
+        X(JOIN, parse_join)                     \
+        X(PART, parse_part)                     \
+        X(LOGOUT, parse_logout)
+
+#define X(a, b) a,
+enum command { COMMAND_ENTRIES };
+#undef X
+
+#define X(a, b) { #a, sizeof(#a)-1, b },
 struct {
         const char              *name;
         const unsigned short    namelen;
         void (*parse)(const char *, size_t, struct user *, int);
-} chatcmd[] = {
-        X("LOGIN", parse_login),
-        X("JOIN", parse_join),
-        X("PART", parse_part),
-        X("MSG", parse_msg),
-        X("LOGOUT", parse_logout)
-};
+} chatcmd[] = { COMMAND_ENTRIES };
 #undef X
 
 /* Parse the command pointed by "bytes". CRLF has already been dropped. */
 static void
 parsecmd(const char *bytes, size_t len, struct user *user, int kq)
 {
-        const char *p, *end;
-        size_t clen;
+        unsigned short clen;
 
-        for (p = bytes, end = bytes+len; *p != ' ' && p < end; p++)
-                ;
-        clen = p-bytes;
         for (int i = 0; i < NELEMS(chatcmd); i++)
-                if (bequal(bytes, clen, chatcmd[i].name, chatcmd[i].namelen)) {
-                        if (user->name == NULL &&
-                            !bequal("LOGIN", 5, bytes, clen) &&
-                            !bequal("LOGOUT", 6, bytes, clen)) {
+                if ((clen = chatcmd[i].namelen) <= len &&
+                    bcmp(bytes, chatcmd[i].name, clen) == 0) {
+                        if (user->name == NULL && i != LOGIN && i != LOGOUT) {
                                 cmderr(user, CNLOGGED, kq);
                                 return;
                         }
-                        if (p < end)
-                                chatcmd[i].parse(p+1, end-p-1, user, kq);
-                        else
-                                chatcmd[i].parse(p, 0, user, kq);
-                        return;
+                        if (clen == len) {
+                                chatcmd[i].parse(bytes+len, 0, user, kq);
+                                return;
+                        }
+                        if (*(bytes+clen) == ' ') {
+                                chatcmd[i].parse(
+                                        bytes+clen+1, len-clen-1, user, kq);
+                                return;
+                        }
                 }
         cmderr(user, CUNKNOWN, kq);
 }
