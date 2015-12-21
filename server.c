@@ -5,6 +5,7 @@
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <strings.h>
 #include <unistd.h>
 
@@ -535,10 +536,10 @@ sendmsgs(int kq, struct kevent *ke, struct user *user)
 static inline
 int crlf_pos(const char *bytes, ssize_t len)
 {
-        for (int i = 1; i < len; i++)
-                if (bytes[i-1] == '\r' && bytes[i] == '\n')
-                        return i+1;
-        return -1;
+        char *p;
+
+        p = memmem(bytes, len, CRLF, sizeof(CRLF)-1);
+        return (p == NULL ? -1 : p-bytes+2);
 }
 
 static void
