@@ -272,7 +272,7 @@ parse_join(const char *bytes, size_t len, struct user *user, int kq)
                 cmderr(user, CHSHARP, kq);
                 return;
         }
-        if (illegal_name(bytes, len-, user, kq, CHEMTPY, CHILLEGAL))
+        if (illegal_name(bytes, len, user, kq, CHEMTPY, CHILLEGAL))
                 return;
         if ((c = table_get(channels, bytes, len)) == NULL) {
                 c = chancpy(bytes, len);
