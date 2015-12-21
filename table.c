@@ -14,7 +14,7 @@ bucket(struct table *t)
 {
         struct bucket *bp = NULL;
 
-        if (SLIST_EMPTY(&(t->free_buckets))) {
+        if (SLIST_EMPTY(&t->free_buckets)) {
                 struct chunk *cp;
                 struct bucket *p;
                 cp = malloc_or_die(sizeof(*cp)+sizeof(*bp)*t->size);

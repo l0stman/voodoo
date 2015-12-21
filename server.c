@@ -168,7 +168,7 @@ channel(const char *name, size_t len)
         c = malloc_or_die(sizeof(*c));
         c->name = name;
         c->len = len;
-        SLIST_INIT(&(c->users));
+        SLIST_INIT(&c->users);
         return (c);
 }
 
@@ -181,7 +181,7 @@ chancpy(const char *name, size_t len)
         bcopy(name, c+1, len);
         c->name = (char *)(c+1);
         c->len = len;
-        SLIST_INIT(&(c->users));
+        SLIST_INIT(&c->users);
         return (c);
 }
 
@@ -284,7 +284,7 @@ parse_join(const char *bytes, size_t len, struct user *user, int kq)
         }
         user->joined_chans[user->nchans++] = c;
         lp = list(user);
-        SLIST_INSERT_HEAD(&(c->users), lp, next);
+        SLIST_INSERT_HEAD(&c->users, lp, next);
         ok(user, kq);
 }
 
@@ -293,7 +293,7 @@ rmuser(struct user *usr, struct channel *chan)
 {
 
         list_remove(usr, &chan->users);
-        if (SLIST_EMPTY(&(chan->users))) {
+        if (SLIST_EMPTY(&chan->users)) {
                 table_del(channels, chan->name, chan->len);
                 free_channel(chan);
         }
