@@ -206,7 +206,7 @@ writeto(struct user *u, struct msg *m, int kq)
 }
 
 static inline void
-perror_to(struct user *u, enum error err, int kq)
+cmderr(struct user *u, enum error err, int kq)
 {
 
         writeto(u, &error_msg[err], kq);
@@ -225,12 +225,12 @@ verify_name(const char *bytes, size_t len, struct user *user, int kq,
 {
 
         if (len == 0) {
-                perror_to(user, empty, kq);
+                cmderr(user, empty, kq);
                 return (1);
         }
         for (int i = 0; i < len; i++)
                 if (bytes[i] == ' ') {
-                        perror_to(user, illegal, kq);
+                        cmderr(user, illegal, kq);
                         return (1);
                 }
         return (0);
@@ -243,11 +243,11 @@ parse_login(const char *bytes, size_t len, struct user *user, int kq)
         if (verify_name(bytes, len, user, kq, UEMPTY, UILLEGAL))
                 return;
         if (user->name != NULL) {
-                perror_to(user, ULOGGED, kq);
+                cmderr(user, ULOGGED, kq);
                 return;
         }
         if (table_get(users, bytes, len)) {
-                perror_to(user, UUSED, kq);
+                cmderr(user, UUSED, kq);
                 return;
         }
         user->name = malloc_or_die(len);
@@ -266,7 +266,7 @@ parse_join(const char *bytes, size_t len, struct user *user, int kq)
         if (verify_name(bytes, len, user, kq, CHEMTPY, CHILLEGAL))
                 return;
         if (*bytes != '#') {
-                perror_to(user, CHSHARP, kq);
+                cmderr(user, CHSHARP, kq);
                 return;
         }
         if ((c = table_get(channels, bytes, len)) == NULL) {
@@ -275,11 +275,11 @@ parse_join(const char *bytes, size_t len, struct user *user, int kq)
         } else
                 for (short i = 0; i < user->nchans; i++)
                         if (user->joined_chans[i] == c) {
-                                perror_to(user, CHJOINED, kq);
+                                cmderr(user, CHJOINED, kq);
                                 return;
                         }
         if (user->nchans == NELEMS(user->joined_chans)) {
-                perror_to(user, CHTOOMANY, kq);
+                cmderr(user, CHTOOMANY, kq);
                 return;
         }
         user->joined_chans[user->nchans++] = c;
@@ -306,7 +306,7 @@ parse_part(const char *bytes, size_t len, struct user *u, int kq)
         if (verify_name(bytes, len, u, kq, CHEMTPY, CHILLEGAL))
                 return;
         if (*bytes != '#') {
-                perror_to(u, CHSHARP, kq);
+                cmderr(u, CHSHARP, kq);
                 return;
         }
         for (short i = 0; i < u->nchans; i++) {
@@ -318,7 +318,7 @@ parse_part(const char *bytes, size_t len, struct user *u, int kq)
                         return;
                 }
         }
-        perror_to(u, CHNJOINED, kq);
+        cmderr(u, CHNJOINED, kq);
 }
 
 static void
@@ -333,14 +333,14 @@ parse_msg(const char *bytes, size_t len, struct user *user, int kq)
         char *buf, *hdr;
 
         if (len == 0) {
-                perror_to(user, MNORECIP, kq);
+                cmderr(user, MNORECIP, kq);
                 return;
         }
         for (rlen = 0; rlen < len; rlen++)
                 if (bytes[rlen] == ' ')
                         break;
         if (rlen == len) {
-                perror_to(user, MNOSPACE, kq);
+                cmderr(user, MNOSPACE, kq);
                 return;
         }
         if (bytes[0] == '#') {
@@ -378,10 +378,10 @@ parse_msg(const char *bytes, size_t len, struct user *user, int kq)
                                 return;
                         }
                 }
-                perror_to(user, CHNJOINED, kq);
+                cmderr(user, CHNJOINED, kq);
                 free_msg(m);
         } else if ((u = table_get(users, bytes, rlen)) == NULL) {
-                        perror_to(user, UNEXIST, kq);
+                        cmderr(user, UNEXIST, kq);
                         free_msg(m);
                         return;
         } else {
@@ -396,7 +396,7 @@ static void
 parse_logout(const char *bytes, size_t len, struct user *user, int kq)
 {
         if (len > 0) {
-                perror_to(user, CJUNK, kq);
+                cmderr(user, CJUNK, kq);
                 return;
         }
         cleanup_conn(user);
@@ -431,7 +431,7 @@ parsecmd(const char *bytes, size_t len, struct user *user, int kq)
                         if (user->name == NULL &&
                             !bequal("LOGIN", 5, bytes, clen) &&
                             !bequal("LOGOUT", 6, bytes, clen)) {
-                                perror_to(user, CNLOGGED, kq);
+                                cmderr(user, CNLOGGED, kq);
                                 return;
                         }
                         if (p < end)
@@ -440,7 +440,7 @@ parsecmd(const char *bytes, size_t len, struct user *user, int kq)
                                 chatcmd[i].parse(p, 0, user, kq);
                         return;
                 }
-        perror_to(user, CUNKNOWN, kq);
+        cmderr(user, CUNKNOWN, kq);
 }
 
 static void
@@ -548,7 +548,7 @@ savecmd(int kq, struct user *usr, const char *cmd, ssize_t len, size_t size)
                 bcopy(cmd, usr->cmdbuf+usr->cmdlen, len);
                 usr->cmdlen += len;
         } else {
-                perror_to(usr, CTOOLONG, kq);
+                cmderr(usr, CTOOLONG, kq);
                 usr->cmdlen = 0;
                 usr->skip_curr_cmd = 1;
         }
@@ -574,7 +574,7 @@ recvcmds(int kq, struct kevent *ke, struct user *user)
                                 offset++;
                         } else if ((pos = crlf_pos(cmd, nread)) != -1) {
                                 if (user->cmdlen+pos > NELEMS(cmd))
-                                        perror_to(user, CTOOLONG, kq);
+                                        cmderr(user, CTOOLONG, kq);
                                 else {
                                         /* Drop CRLF from the command. */
                                         bcopy(cmd, user->cmdbuf + user->cmdlen,
