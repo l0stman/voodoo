@@ -268,12 +268,12 @@ parse_join(const char *bytes, size_t len, struct user *user, int kq)
         struct channel *c;
         struct list *lp;
 
-        if (illegal_name(bytes, len, user, kq, CHEMTPY, CHILLEGAL))
-                return;
         if (*bytes != '#') {
                 cmderr(user, CHSHARP, kq);
                 return;
         }
+        if (illegal_name(bytes, len-, user, kq, CHEMTPY, CHILLEGAL))
+                return;
         if ((c = table_get(channels, bytes, len)) == NULL) {
                 c = chancpy(bytes, len);
                 table_put(channels, c->name, c->len, c);
@@ -308,12 +308,12 @@ static void
 parse_part(const char *bytes, size_t len, struct user *u, int kq)
 {
 
-        if (illegal_name(bytes, len, u, kq, CHEMTPY, CHILLEGAL))
-                return;
         if (*bytes != '#') {
                 cmderr(u, CHSHARP, kq);
                 return;
         }
+        if (illegal_name(bytes, len, u, kq, CHEMTPY, CHILLEGAL))
+                return;
         for (short i = 0; i < u->nchans; i++) {
                 struct channel *c = u->joined_chans[i];
                 if (bequal(c->name, c->len, bytes, len)) {
