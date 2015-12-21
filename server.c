@@ -65,6 +65,7 @@ free_msg(struct msg *m)
         X(ULOGGED, "already logged in")                                 \
         X(UUSED, "username is already being used")                      \
         X(UNEXIST, "user doesn't exist")                                \
+        X(USHARP, "username can't start with #")                        \
         X(CUNKNOWN, "unknown command")                                  \
         X(CTOOLONG, "command exceeds maximum length")                   \
         X(CNLOGGED, "not logged in")                                    \
@@ -240,12 +241,16 @@ static void
 parse_login(const char *bytes, size_t len, struct user *user, int kq)
 {
 
-        if (illegal_name(bytes, len, user, kq, UEMPTY, UILLEGAL))
-                return;
         if (user->name != NULL) {
                 cmderr(user, ULOGGED, kq);
                 return;
         }
+        if (*bytes == '#') {
+                cmderr(user, USHARP, kq);
+                return;
+        }
+        if (illegal_name(bytes, len, user, kq, UEMPTY, UILLEGAL))
+                return;
         if (table_get(users, bytes, len)) {
                 cmderr(user, UUSED, kq);
                 return;
