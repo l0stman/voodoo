@@ -102,11 +102,13 @@ static void
 read_msgs(const struct kevent *ke, int kq)
 {
         struct kevent change;
+        size_t nbytes;
 
         if (ke->data == 0)
                 err_quit("server terminated the connection");
-        cread(sockfd, output, ke->data);
-        if (output->len == ke->data) {
+        nbytes = MIN(ke->data, CBUFSIZ - output->len);
+        cread(sockfd, output, nbytes);
+        if (output->len == nbytes) {
                 EV_SET(&change, STDOUT_FILENO, EVFILT_WRITE, EV_ENABLE, 0, 0,
                 (void *)write_msgs);
                 kevent_or_die(kq, &change, 1, NULL, 0, NULL);
