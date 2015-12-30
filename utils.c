@@ -18,12 +18,32 @@ read_or_die(int fd, void *buf, size_t nbytes)
 }
 
 ssize_t
+readv_or_die(int fd, const struct iovec *iov, int iovcnt)
+{
+        ssize_t n;
+
+        if ((n = readv(fd, iov, iovcnt)) == -1)
+                err_sys("readv");
+        return (n);
+}
+
+ssize_t
 write_or_die(int fd, const void *buf, size_t nbytes)
 {
         ssize_t n;
 
         if ((n = write(fd, buf, nbytes)) == -1)
                 err_sys("write");
+        return (n);
+}
+
+ssize_t
+writev_or_die(int fd, const struct iovec *iov, int iovcnt)
+{
+        ssize_t n;
+
+        if ((n = writev(fd, iov, iovcnt)) == -1)
+                err_sys("writev");
         return (n);
 }
 
