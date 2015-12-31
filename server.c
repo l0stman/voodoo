@@ -603,7 +603,7 @@ recvcmds(int kq, struct kevent *ke, struct user *user)
                         }
                 }
                 while (offset < nread) {
-                        if ((pos = crlf_pos(cmd+offset, nread)) == -1) {
+                        if ((pos = crlf_pos(cmd+offset, nread-offset)) == -1) {
                                 if (!user->skip_curr_cmd)
                                         savecmd(kq, user, cmd+offset,
                                                 nread-offset, NELEMS(cmd));
