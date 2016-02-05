@@ -586,8 +586,8 @@ int crlf_pos(const char *bytes, ssize_t len)
 {
         char *p;
 
-        p = memmem(bytes, len, CRLF, sizeof(CRLF)-1);
-        return (p == NULL ? -1 : p-bytes+2);
+        p = memchr(bytes, '\n', len);
+        return (p == NULL || p == bytes || *(p-1) != '\r' ? -1 : p-bytes+1);
 }
 
 static void
