@@ -47,6 +47,8 @@ struct queue {
         size_t len;
 };
 
+#define QUEUE_MASK(q)   (NELEMS(q->buf)-1)
+
 static struct queue *
 queue(void)
 {
@@ -78,7 +80,7 @@ queue_first(const struct queue *q)
 static inline void
 queue_remove_head(struct queue *q)
 {
-        q->offset = (q->offset+1) & (NELEMS(q->buf)-1);
+        q->offset = (q->offset+1) & QUEUE_MASK(q);
         q->len--;
 }
 
@@ -88,7 +90,7 @@ enqueue(struct msg *m, struct queue* q)
         /* Do nothing if the queue is full. */
         if (q->len == NELEMS(q->buf))
                 return;
-        q->buf[(q->offset + q->len++) & (NELEMS(q->buf)-1)] = m;
+        q->buf[(q->offset + q->len++) & QUEUE_MASK(q)] = m;
 }
 
 static void *
