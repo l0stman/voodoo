@@ -17,29 +17,11 @@
 #define CMDMAXSIZE      1024 /* Maximum size (with CRLF) of a single command */
 #define CRLF            "\x0d\x0a"
 
-STAILQ_HEAD(queue, msg);
 struct msg {
         const char      *bytes;
         size_t          len;
         unsigned int    refcnt;
-        STAILQ_ENTRY(msg) msgs;
 };
-
-static struct queue *
-queue(void)
-{
-        struct queue *q;
-
-        q = malloc_or_die(sizeof(*q));
-        STAILQ_INIT(q);
-        return (q);
-}
-
-static inline void
-free_queue(struct queue *q)
-{
-        free(q);
-}
 
 static struct msg *
 msg(const char *bytes, size_t len)
@@ -57,6 +39,68 @@ static inline void
 free_msg(struct msg *m)
 {
         free(m);
+}
+
+struct queue {
+        struct msg *buf[512];   /* should be a power of 2 */
+        size_t offset;
+        size_t len;
+};
+
+static struct queue *
+queue(void)
+{
+        struct queue *q;
+
+        q = malloc_or_die(sizeof(*q));
+        q->offset = q->len = 0;
+        return (q);
+}
+
+static inline void
+free_queue(struct queue *q)
+{
+        free(q);
+}
+
+static inline int
+isempty_queue(struct queue *q)
+{
+        return (q->len == 0);
+}
+
+static inline struct msg *
+queue_first(const struct queue *q)
+{
+        return (q->buf[q->offset]);
+}
+
+static inline void
+queue_remove_head(struct queue *q)
+{
+        q->offset = (q->offset+1) & (NELEMS(q->buf)-1);
+        q->len--;
+}
+
+static void
+enqueue(struct msg *m, struct queue* q)
+{
+        /* Do nothing if the queue is full. */
+        if (q->len == NELEMS(q->buf))
+                return;
+        q->buf[(q->offset + q->len++) & (NELEMS(q->buf)-1)] = m;
+}
+
+static void *
+dequeue(struct queue *q)
+{
+        struct msg *m;
+
+        if (isempty_queue(q))
+                err_quit("dequeue: the queue is empty");
+        m = queue_first(q);
+        queue_remove_head(q);
+        return (m);
 }
 
 #define ERROR_ENTRIES                                                   \
@@ -84,11 +128,8 @@ enum error { ERROR_ENTRIES };
 #undef X
 
 #define M(m)    "ERROR " m CRLF
-#define X(a, b) { M(b), sizeof(M(b))-1 },
-struct {
-        const char      *str;
-        const size_t    len;
-} error_msg[] = { ERROR_ENTRIES };
+#define X(a, b) { M(b), sizeof(M(b))-1, 1 },
+static struct msg error_msg[] = { ERROR_ENTRIES };
 #undef M
 #undef X
 
@@ -201,7 +242,7 @@ writeto(struct user *u, struct msg *m, int kq)
 {
 
         m->refcnt++;
-        STAILQ_INSERT_TAIL(u->msg_queue, m, msgs);
+        enqueue(m, u->msg_queue);
         if (!u->write_enabled) {
                 struct kevent change;
                 EV_SET(&change, u->connfd, EVFILT_WRITE,  EV_ENABLE, 0, 0, NULL);
@@ -214,7 +255,7 @@ static inline void
 cmderr(struct user *u, enum error err, int kq)
 {
 
-        writeto(u, msg(error_msg[err].str, error_msg[err].len), kq);
+        writeto(u, &error_msg[err], kq);
 }
 
 static inline void
@@ -483,9 +524,8 @@ cleanup_conn(struct user *user)
 {
         struct msg *m;
 
-        while (!STAILQ_EMPTY(user->msg_queue)) {
-                m = STAILQ_FIRST(user->msg_queue);
-                STAILQ_REMOVE_HEAD(user->msg_queue , msgs);
+        while (!isempty_queue(user->msg_queue)) {
+                m = dequeue(user->msg_queue);
                 if (--m->refcnt == 0)
                         free_msg(m);
 
@@ -507,29 +547,29 @@ static void
 sendmsgs(int kq, struct kevent *ke, struct user *user)
 {
         struct msg *m;
-        size_t rem_space;
+        size_t avail;
 
-        rem_space = ke->data;
-        while (rem_space > 0 && !STAILQ_EMPTY(user->msg_queue)) {
+        avail = ke->data;
+        while (avail > 0 && !isempty_queue(user->msg_queue)) {
                 size_t len;
-                m = STAILQ_FIRST(user->msg_queue);
+                m = queue_first(user->msg_queue);
                 len = m->len - user->msg_offset;
-                if (len <= rem_space) {
-                        rem_space -= len;
+                if (len <= avail) {
+                        avail -= len;
                         write(ke->ident, m->bytes+user->msg_offset, len);
                         user->msg_offset = 0;
-                        STAILQ_REMOVE_HEAD(user->msg_queue, msgs);
+                        queue_remove_head(user->msg_queue);
                         if (--m->refcnt == 0) {
                                 free_msg(m);
                         }
                 } else {
-                        write(ke->ident, m->bytes+user->msg_offset, rem_space);
-                        user->msg_offset += rem_space;
+                        write(ke->ident, m->bytes+user->msg_offset, avail);
+                        user->msg_offset += avail;
                         break;
                 }
         }
 
-        if (STAILQ_EMPTY(user->msg_queue)) {
+        if (isempty_queue(user->msg_queue)) {
                 struct kevent change;
                 EV_SET(&change, ke->ident, EVFILT_WRITE, EV_DISABLE, 0, 0, NULL);
                 kevent_or_die(kq, &change, 1, NULL, 0, NULL);
