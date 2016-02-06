@@ -23,18 +23,6 @@ struct msg {
         unsigned int    refcnt;
 };
 
-static struct msg *
-msg(const char *bytes, size_t len)
-{
-        struct msg *m;
-
-        m = malloc_or_die(sizeof(*m));
-        m->bytes = bytes;
-        m->len = len;
-        m->refcnt = 0;
-        return (m);
-}
-
 static inline void
 free_msg(struct msg *m)
 {
@@ -263,8 +251,8 @@ cmderr(struct user *u, enum error err, int kq)
 static inline void
 ok(struct user *u, int kq)
 {
-        static const char s[] = "OK" CRLF;
-        writeto(u, msg(s, 4), kq);
+        static struct msg OK = { "OK" CRLF, 4, 1 };
+        writeto(u, &OK, kq);
 }
 
 static int
