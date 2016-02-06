@@ -369,19 +369,17 @@ parse_msg(const char *bytes, size_t len, struct user *user, int kq)
         struct user *u;
         struct msg *m;
         size_t offset, hlen, rlen, size;
-        char *buf, *hdr;
+        char *buf, *hdr, *cp;
 
         if (len == 0) {
                 cmderr(user, MNORECIP, kq);
                 return;
         }
-        for (rlen = 0; rlen < len; rlen++)
-                if (bytes[rlen] == ' ')
-                        break;
-        if (rlen == len) {
+        if ((cp = memchr(bytes, ' ', len)) == NULL) {
                 cmderr(user, MNOSPACE, kq);
                 return;
         }
+        rlen = cp-bytes;
         if (bytes[0] == '#') {
                 hdr = chanhdr;
                 hlen = sizeof(chanhdr)-1;
