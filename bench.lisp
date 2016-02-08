@@ -8,7 +8,8 @@
   (:export :request
            :bogus-request
            :channel-message
-           :private-message))
+           :private-message
+           :all))
 
 (in-package :bench)
 
@@ -255,3 +256,36 @@
 (defun private-message (addr port &key (num-messages 1000000) (num-workers 50))
   (request addr port #'make-pm-sender #'make-pm-receiver num-messages
            num-workers num-workers))
+
+;;; WEIGHTS correspond respectively to BOGUS-REQUEST, CHANNEL-MESSAGE
+;;; and PRIVATE-MESSAGE.
+(defun all (addr port &key (num-requests 1000000)
+                           (num-workers 500)
+                           (weights #(1 8 1)))
+  (let* ((sum (reduce #'+ weights))
+         (n (floor (* (/ (svref weights 0) sum)
+                      num-workers)))
+         (m (floor (* (/ (+ (svref weights 0) (svref weights 1))
+                         sum)
+                      num-workers))))
+    (flet ((make-sender (nreq sock write-handlers id &rest args)
+             (apply (cond ((< id n) #'make-bogus-request-sender)
+                          ((< id m) #'make-channel-sender)
+                          (t #'make-pm-sender))
+                    nreq
+                    sock
+                    write-handlers
+                    id
+                    args))
+           (make-receiver (nreq sock read-handlers id &rest args)
+             (apply (cond ((< id n) #'make-request-receiver)
+                          ((< id m) #'make-channel-receiver)
+                          (t #'make-pm-receiver))
+                    nreq
+                    sock
+                    read-handlers
+                    id
+                    args)))
+      (request addr port #'make-sender #'make-receiver num-requests
+               num-workers num-workers))))
+
