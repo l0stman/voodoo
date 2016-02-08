@@ -1,11 +1,14 @@
-;;; package for load-testing the server using SBCL.
+;;; Package for load-testing the server using SBCL.
+;;; NOTE: Increase the queue size on the server in order to decrease
+;;; the number of messages being dropped.
 (in-package :cl-user)
 
 (defpackage :bench
   (:use :cl :sb-bsd-sockets)
   (:export :request
            :bogus-request
-           :channel-message))
+           :channel-message
+           :private-message))
 
 (in-package :bench)
 
@@ -136,7 +139,6 @@
                (= offset (length msg)))))
       (lambda (fd)
         (when (send-msg)
-;          (format t "writer: ~D ~D~%" id nreq)
           (cond ((= (decf nreq) -1)
                  (sb-sys:remove-fd-handler (get-handler fd write-handlers))
                  (rem-handler fd write-handlers))
@@ -158,10 +160,8 @@
                  (loop
                    (let ((len1 (min (- (length ok) offset) (- len pos))))
                      (unless (string= ok *buf*
-                                      :start1 offset
-                                      :end1 (+ offset len1)
-                                      :start2 pos
-                                      :end2 (+ pos len1))
+                                      :start1 offset :end1 (+ offset len1)
+                                      :start2 pos :end2 (+ pos len1))
                        (return))
                      (incf pos len1)
                      (when (< (incf offset len1) (length ok))
@@ -189,3 +189,69 @@
 (defun channel-message (addr port &key (num-messages 500000) (num-workers 2))
   (request addr port #'make-channel-sender #'make-channel-receiver num-messages
            num-workers))
+
+(defun make-pm-sender (nreq sock write-handlers id &rest args)
+  (let ((msg (format nil "LOGIN user~D~C~%" id #\Return))
+        (offset 0)
+        (max-id (first args)))
+    (flet ((send-msg ()
+             (let* ((req (if (zerop offset) msg (subseq msg offset))))
+               (incf offset (socket-send sock req (length req) :dontwait t))
+               (= offset (length msg)))))
+      (lambda (fd)
+        (when (send-msg)
+          (cond ((= (decf nreq) -1)
+                 (sb-sys:remove-fd-handler (get-handler fd write-handlers))
+                 (rem-handler fd write-handlers))
+                (t (setf msg    (format nil "MSG user~D ~A~C~%"
+                                        (random max-id)
+                                        (svref *messages*
+                                               (random (length *messages*)))
+                                        #\Return)
+                         offset 0))))))))
+
+(defun make-pm-receiver (nreq sock read-handlers &rest args)
+  (declare (ignore args))
+  (let ((ok (format nil "OK~C~%" #\Return))
+        (err (format nil "ERROR unknown user~C~%" #\Return))
+        (cmd nil)
+        (offset 0)
+        (pending-return-p nil))
+    (lambda (fd)
+      (let ((len (nth-value 1 (socket-receive sock *buf* nil :dontwait t)))
+            (pos 0))
+        (flet ((count-ack ()
+                 (loop
+                   (when (zerop offset)
+                     (setf cmd (if (char= (char *buf* 0) #\E) err ok)))
+                   (let ((len1 (min (- (length cmd) offset) (- len pos))))
+                     (unless (string= cmd *buf*
+                                      :start1 offset :end1 (+ offset len1)
+                                      :start2 pos :end2 (+ pos len1))
+                       (return))
+                     (incf pos len1)
+                     (when (< (incf offset len1) (length ok))
+                       (return))
+                     (setf offset 0)
+                     (decf nreq)
+                     (incf *num-request-acks*)))))
+          (when (and pending-return-p (char= (char *buf* 0) #\Newline))
+            (setf pending-return-p nil)
+            (incf pos))
+          (count-ack)
+          (loop while (setf pos (position #\Return *buf* :start pos :end len))
+                do (when (= (incf pos) len)
+                     (setf pending-return-p t)
+                     (return))
+                   (when (char= (char *buf* pos) #\Newline)
+                     (if (= (incf pos) len)
+                         (return)
+                         (count-ack))))
+          (assert (>= nreq -1))
+          (when (= nreq -1)
+            (sb-sys:remove-fd-handler (get-handler fd read-handlers))
+            (rem-handler fd read-handlers)))))))
+
+(defun private-message (addr port &key (num-messages 1000000) (num-workers 50))
+  (request addr port #'make-pm-sender #'make-pm-receiver num-messages
+           num-workers num-workers))
