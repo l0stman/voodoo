@@ -98,7 +98,7 @@ dequeue(struct queue *q)
         X(UILLEGAL, "username contains illegal character")              \
         X(ULOGGED, "already logged in")                                 \
         X(UUSED, "username is already being used")                      \
-        X(UNEXIST, "user doesn't exist")                                \
+        X(UUNKNOWN, "unknown user")                                     \
         X(USHARP, "username can't start with #")                        \
         X(CUNKNOWN, "unknown command")                                  \
         X(CTOOLONG, "command exceeds maximum length")                   \
@@ -418,7 +418,7 @@ parse_msg(const char *bytes, size_t len, struct user *user, int kq)
                 cmderr(user, CHNJOINED, kq);
                 free_msg(m);
         } else if ((u = table_get(users, bytes, rlen)) == NULL) {
-                        cmderr(user, UNEXIST, kq);
+                        cmderr(user, UUNKNOWN, kq);
                         free_msg(m);
                         return;
         } else {
